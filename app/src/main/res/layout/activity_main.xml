@@ -144,7 +144,17 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:paddingTop="56dp">
+            android:paddingTop="20dp">
+
+            <View
+                android:id="@+id/drawerHandle"
+                android:layout_width="40dp"
+                android:layout_height="5dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="20dp"
+                android:background="@drawable/bg_glass_pill"
+                android:clickable="true"
+                android:focusable="true" />
 
             <FrameLayout
                 android:layout_width="match_parent"

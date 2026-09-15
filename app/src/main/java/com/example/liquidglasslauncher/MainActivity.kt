@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var clearSearchButton: View
     private lateinit var recentLabel: View
     private lateinit var recentAppsRow: LinearLayout
+    private lateinit var drawerHandle: View
 
     private var allApps: List<AppInfo> = emptyList()
     private lateinit var drawerAdapter: AppAdapter
@@ -85,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         clearSearchButton = findViewById(R.id.clearSearchButton)
         recentLabel = findViewById(R.id.recentLabel)
         recentAppsRow = findViewById(R.id.recentAppsRow)
+        drawerHandle = findViewById(R.id.drawerHandle)
 
         gridCellPx = 92f * resources.displayMetrics.density
 
@@ -96,11 +98,50 @@ class MainActivity : AppCompatActivity() {
         setupHomeDragTarget()
         setupDockDragTarget()
         setupRemoveZone()
+        setupDrawerSwipeDownToClose()
         loadPinnedIcons()
         refreshRecentRow()
 
         openDrawerButton.setOnClickListener { openDrawer() }
+        drawerHandle.setOnClickListener { closeDrawer() }
     }
+
+    /**
+     * Das App-Raster fängt vertikale Wischgesten normalerweise selbst als Scroll ab,
+     * daher kommt ein Swipe-nach-unten nie beim allgemeinen Gesture-Detector an.
+     * Dieser Listener erkennt gezielt: Liste steht ganz oben UND Finger zieht weiter
+     * nach unten -> das ist kein Scroll mehr, sondern der Wunsch, den Drawer zu schließen.
+     */
+    private fun setupDrawerSwipeDownToClose() {
+        appDrawerRecycler.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            private var downY = 0f
+            private var closing = false
+
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downY = e.y
+                        closing = false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val pulledDown = e.y - downY
+                        val alreadyAtTop = !rv.canScrollVertically(-1)
+                        if (alreadyAtTop && pulledDown > 60) {
+                            closing = true
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+
+            override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+                if (closing && (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL)) {
+                    closeDrawer()
+                    closing = false
+                }
+            }
+        })
 
     override fun onResume() {
         super.onResume()
@@ -120,7 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyGlassBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val blurEffect = RenderEffect.createBlurEffect(60f, 60f, Shader.TileMode.CLAMP)
+            val blurEffect = RenderEffect.createBlurEffect(35f, 35f, Shader.TileMode.CLAMP)
             liquidBackground.setRenderEffect(blurEffect)
         }
     }

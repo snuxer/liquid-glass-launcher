@@ -36,10 +36,13 @@ class LiquidBackgroundView @JvmOverloads constructor(
 
     private var blobs: List<Blob> = emptyList()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val blobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SCREEN)
+    }
     private var t = 0f
 
     private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = 24000
+        duration = 18000
         repeatCount = ValueAnimator.INFINITE
         interpolator = LinearInterpolator()
         addUpdateListener {
@@ -64,11 +67,11 @@ class LiquidBackgroundView @JvmOverloads constructor(
             Blob(
                 baseX = w * (0.15f + 0.7f * rnd.nextFloat()),
                 baseY = h * (0.1f + 0.8f * rnd.nextFloat()),
-                radius = w * (0.45f + 0.25f * rnd.nextFloat()),
+                radius = w * (0.4f + 0.2f * rnd.nextFloat()),
                 color = color,
                 phase = i * 1.3f,
                 speed = 0.5f + rnd.nextFloat() * 0.5f,
-                orbit = w * (0.10f + 0.10f * rnd.nextFloat())
+                orbit = w * (0.28f + 0.18f * rnd.nextFloat())
             )
         }
     }
@@ -85,7 +88,7 @@ class LiquidBackgroundView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         paint.shader = null
-        paint.color = Color.parseColor("#12142A")
+        paint.color = Color.parseColor("#181A32")
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
 
         for (blob in blobs) {
@@ -93,13 +96,13 @@ class LiquidBackgroundView @JvmOverloads constructor(
             val cx = blob.baseX + (blob.orbit * sin(angle)).toFloat()
             val cy = blob.baseY + (blob.orbit * sin(angle * 0.7 + blob.phase)).toFloat()
 
-            paint.shader = RadialGradient(
+            blobPaint.shader = RadialGradient(
                 cx, cy, blob.radius,
-                intArrayOf(withAlpha(blob.color, 190), withAlpha(blob.color, 0)),
+                intArrayOf(withAlpha(blob.color, 255), withAlpha(blob.color, 0)),
                 floatArrayOf(0f, 1f),
                 Shader.TileMode.CLAMP
             )
-            canvas.drawCircle(cx, cy, blob.radius, paint)
+            canvas.drawCircle(cx, cy, blob.radius, blobPaint)
         }
     }
 
