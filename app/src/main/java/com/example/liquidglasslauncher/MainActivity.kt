@@ -1,7 +1,5 @@
 package com.example.liquidglasslauncher
 
-import android.app.WallpaperManager
-import android.app.WallpaperInfo
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.RenderEffect
@@ -13,16 +11,17 @@ import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.GestureDetector
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,17 +30,17 @@ import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var wallpaperImage: ImageView
+    private lateinit var liquidBackground: LiquidBackgroundView
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
     private lateinit var appDrawerPanel: FrameLayout
     private lateinit var appDrawerRecycler: RecyclerView
-    private lateinit var dockRecycler: RecyclerView
+    private lateinit var dock: LinearLayout
+    private lateinit var openDrawerButton: View
     private lateinit var searchField: EditText
 
     private var allApps: List<AppInfo> = emptyList()
     private lateinit var drawerAdapter: AppAdapter
-    private lateinit var dockAdapter: AppAdapter
 
     private var drawerOpen = false
 
@@ -57,19 +56,21 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        wallpaperImage = findViewById(R.id.wallpaperImage)
+        liquidBackground = findViewById(R.id.liquidBackground)
         clockText = findViewById(R.id.clockText)
         dateText = findViewById(R.id.dateText)
         appDrawerPanel = findViewById(R.id.appDrawerPanel)
         appDrawerRecycler = findViewById(R.id.appDrawerRecycler)
-        dockRecycler = findViewById(R.id.dockRecycler)
+        dock = findViewById(R.id.dock)
+        openDrawerButton = findViewById(R.id.openDrawerButton)
         searchField = findViewById(R.id.searchField)
 
-        loadWallpaper()
         applyGlassBlur()
         setupApps()
         setupGestures()
         setupSearch()
+
+        openDrawerButton.setOnClickListener { openDrawer() }
     }
 
     override fun onResume() {
@@ -88,28 +89,14 @@ class MainActivity : AppCompatActivity() {
         dateText.text = SimpleDateFormat("EEEE, d. MMMM", Locale.getDefault()).format(now)
     }
 
-    /** Liest das aktuelle System-Wallpaper aus, damit der Home-Screen "echt" wirkt. */
-    private fun loadWallpaper() {
-        try {
-            val wm = WallpaperManager.getInstance(this)
-            val drawable = wm.drawable
-            if (drawable != null) {
-                wallpaperImage.setImageDrawable(drawable)
-            }
-        } catch (e: SecurityException) {
-            // Kein Zugriff (z. B. Live-Wallpaper ohne Permission) -> Fallback-Gradient bleibt sichtbar
-        }
-    }
-
     /**
-     * Wendet einen echten Blur-Effekt (RenderEffect) auf das Wallpaper an, ab Android 12 (API 31).
-     * Das ist der eigentliche "Liquid Glass"-Effekt: der Hintergrund schimmert unscharf durch
-     * die transluzenten Karten. Auf älteren Geräten bleibt es bei der Transparenz ohne Weichzeichnung.
+     * Zusätzliche Weichzeichnung über dem animierten Hintergrund, ab Android 12 (API 31).
+     * Sorgt dafür, dass die Farbblasen noch weicher ineinander übergehen ("Liquid"-Effekt).
      */
     private fun applyGlassBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val blurEffect = RenderEffect.createBlurEffect(40f, 40f, Shader.TileMode.CLAMP)
-            wallpaperImage.setRenderEffect(blurEffect)
+            val blurEffect = RenderEffect.createBlurEffect(60f, 60f, Shader.TileMode.CLAMP)
+            liquidBackground.setRenderEffect(blurEffect)
         }
     }
 
@@ -120,10 +107,20 @@ class MainActivity : AppCompatActivity() {
         appDrawerRecycler.layoutManager = GridLayoutManager(this, 4)
         appDrawerRecycler.adapter = drawerAdapter
 
-        val favorites = allApps.take(5)
-        dockAdapter = AppAdapter(favorites) { launchApp(it) }
-        dockRecycler.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        dockRecycler.adapter = dockAdapter
+        buildDock(allApps.take(5))
+    }
+
+    /** Baut das Dock als feste Icon-Reihe auf (kein RecyclerView -> nichts wird abgeschnitten). */
+    private fun buildDock(favorites: List<AppInfo>) {
+        dock.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+        for (app in favorites) {
+            val itemView = inflater.inflate(R.layout.dock_icon_item, dock, false)
+            val icon = itemView.findViewById<ImageView>(R.id.dockIcon)
+            icon.setImageDrawable(app.icon)
+            itemView.setOnClickListener { launchApp(app) }
+            dock.addView(itemView)
+        }
     }
 
     private fun loadInstalledApps(): List<AppInfo> {
@@ -165,9 +162,15 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    /** Nach-oben-Wischen auf dem Home-Screen öffnet den App-Drawer, wie bei den meisten Launchern. */
+    /**
+     * Nach-oben-Wischen öffnet den App-Drawer. WICHTIG: onDown MUSS true zurückgeben,
+     * sonst verwirft Android die Geste sofort nach dem ersten Touch-Down und onFling
+     * wird nie aufgerufen (das war der Bug in der ersten Version).
+     */
     private fun setupGestures() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
             override fun onFling(
                 e1: MotionEvent?,
                 e2: MotionEvent,
@@ -176,7 +179,7 @@ class MainActivity : AppCompatActivity() {
             ): Boolean {
                 if (e1 == null) return false
                 val deltaY = e2.y - e1.y
-                if (abs(deltaY) > 100 && abs(velocityY) > abs(velocityX)) {
+                if (abs(deltaY) > 80 && abs(velocityY) > abs(velocityX)) {
                     if (deltaY < 0) openDrawer() else closeDrawer()
                     return true
                 }
@@ -186,6 +189,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.rootLayout).setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
+            true
         }
     }
 
