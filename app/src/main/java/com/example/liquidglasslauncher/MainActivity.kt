@@ -15,6 +15,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.DragEvent
 import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -32,26 +33,31 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var liquidBackground: LiquidBackgroundView
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
+    private lateinit var clockCard: View
+    private lateinit var removeZone: View
     private lateinit var appDrawerPanel: FrameLayout
     private lateinit var appDrawerRecycler: RecyclerView
     private lateinit var dock: LinearLayout
     private lateinit var homeIconContainer: FrameLayout
     private lateinit var openDrawerButton: View
     private lateinit var searchField: EditText
+    private lateinit var clearSearchButton: View
+    private lateinit var recentLabel: View
+    private lateinit var recentAppsRow: LinearLayout
 
     private var allApps: List<AppInfo> = emptyList()
     private lateinit var drawerAdapter: AppAdapter
 
-    // Aktuelle Dock-Belegung (veränderbar per Drag & Drop / Long-Press)
     private val dockApps = mutableListOf<AppInfo>()
-
     private var drawerOpen = false
+    private var gridCellPx = 0f
 
     private val clockHandler = Handler(Looper.getMainLooper())
     private val clockRunnable = object : Runnable {
@@ -68,20 +74,30 @@ class MainActivity : AppCompatActivity() {
         liquidBackground = findViewById(R.id.liquidBackground)
         clockText = findViewById(R.id.clockText)
         dateText = findViewById(R.id.dateText)
+        clockCard = findViewById(R.id.clockCard)
+        removeZone = findViewById(R.id.removeZone)
         appDrawerPanel = findViewById(R.id.appDrawerPanel)
         appDrawerRecycler = findViewById(R.id.appDrawerRecycler)
         dock = findViewById(R.id.dock)
         homeIconContainer = findViewById(R.id.homeIconContainer)
         openDrawerButton = findViewById(R.id.openDrawerButton)
         searchField = findViewById(R.id.searchField)
+        clearSearchButton = findViewById(R.id.clearSearchButton)
+        recentLabel = findViewById(R.id.recentLabel)
+        recentAppsRow = findViewById(R.id.recentAppsRow)
+
+        gridCellPx = 92f * resources.displayMetrics.density
 
         applyGlassBlur()
         setupApps()
         setupGestures()
         setupSearch()
+        setupGlobalDragUi()
         setupHomeDragTarget()
         setupDockDragTarget()
+        setupRemoveZone()
         loadPinnedIcons()
+        refreshRecentRow()
 
         openDrawerButton.setOnClickListener { openDrawer() }
     }
@@ -117,7 +133,7 @@ class MainActivity : AppCompatActivity() {
         drawerAdapter = AppAdapter(
             apps = allApps,
             onClick = { launchApp(it) },
-            onLongClick = { app, view -> startDragFromDrawer(app, view) }
+            onLongClick = { app, view -> startDrag(DragPayload.FromDrawer(app), view) }
         )
         appDrawerRecycler.layoutManager = GridLayoutManager(this, 4)
         appDrawerRecycler.adapter = drawerAdapter
@@ -152,13 +168,6 @@ class MainActivity : AppCompatActivity() {
             .sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
-    /**
-     * Öffnet eine App zuverlässig: baut zuerst ein explizites Intent auf die genaue
-     * Launcher-Activity (statt sich nur auf getLaunchIntentForPackage zu verlassen,
-     * das bei manchen Apps null liefert). Schlägt das fehl, wird als Fallback doch
-     * getLaunchIntentForPackage versucht; klappt auch das nicht, gibt's eine
-     * verständliche Meldung statt eines stillen Nichtstuns.
-     */
     private fun launchApp(app: AppInfo) {
         val explicitIntent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
@@ -167,7 +176,7 @@ class MainActivity : AppCompatActivity() {
         }
         try {
             startActivity(explicitIntent)
-            closeDrawer()
+            afterLaunch(app)
             return
         } catch (e: Exception) {
             // fällt durch zum Fallback unten
@@ -178,7 +187,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(fallbackIntent)
-                closeDrawer()
+                afterLaunch(app)
                 return
             } catch (e: ActivityNotFoundException) {
                 // fällt durch zur Fehlermeldung unten
@@ -186,6 +195,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         Toast.makeText(this, "${app.label} konnte nicht geöffnet werden", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun afterLaunch(app: AppInfo) {
+        closeDrawer()
+        LauncherPrefs.recordLaunch(this, app.packageName)
+        refreshRecentRow()
     }
 
     private fun setupSearch() {
@@ -196,9 +211,33 @@ class MainActivity : AppCompatActivity() {
                 val filtered = if (query.isBlank()) allApps
                 else allApps.filter { it.label.lowercase(Locale.getDefault()).contains(query) }
                 drawerAdapter.updateData(filtered)
+                clearSearchButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
+                val showRecents = query.isBlank()
+                recentLabel.visibility = if (showRecents && recentAppsRow.childCount > 0) View.VISIBLE else View.GONE
+                recentAppsRow.visibility = if (showRecents && recentAppsRow.childCount > 0) View.VISIBLE else View.GONE
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+        clearSearchButton.setOnClickListener { searchField.text.clear() }
+    }
+
+    /** Zeigt die zuletzt geöffneten Apps oben im Drawer, wie bei modernen Launchern üblich. */
+    private fun refreshRecentRow() {
+        recentAppsRow.removeAllViews()
+        val recentPackages = LauncherPrefs.getRecentApps(this).take(6)
+        val recentInfos = recentPackages.mapNotNull { pkg -> allApps.find { it.packageName == pkg } }
+        val inflater = LayoutInflater.from(this)
+        for (app in recentInfos) {
+            val itemView = inflater.inflate(R.layout.dock_icon_item, recentAppsRow, false)
+            val icon = itemView.findViewById<ImageView>(R.id.dockIcon)
+            icon.setImageDrawable(app.icon)
+            itemView.applyPressBounce()
+            itemView.setOnClickListener { launchApp(app) }
+            recentAppsRow.addView(itemView)
+        }
+        val visible = recentInfos.isNotEmpty() && searchField.text.isNullOrBlank()
+        recentLabel.visibility = if (visible) View.VISIBLE else View.GONE
+        recentAppsRow.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     // ---------- Dock ----------
@@ -210,21 +249,10 @@ class MainActivity : AppCompatActivity() {
             val itemView = inflater.inflate(R.layout.dock_icon_item, dock, false)
             val icon = itemView.findViewById<ImageView>(R.id.dockIcon)
             icon.setImageDrawable(app.icon)
+            itemView.applyPressBounce()
             itemView.setOnClickListener { launchApp(app) }
             itemView.setOnLongClickListener {
-                AlertDialog.Builder(this)
-                    .setTitle(app.label)
-                    .setMessage("Aus dem Dock entfernen?")
-                    .setPositiveButton("Entfernen") { _, _ ->
-                        if (index < dockApps.size) {
-                            dockApps.removeAt(index)
-                            persistDock()
-                            rebuildDockViews()
-                        }
-                    }
-                    .setNegativeButton("Abbrechen", null)
-                    .show()
-                true
+                startDrag(DragPayload.FromDock(app, index), itemView)
             }
             dock.addView(itemView)
         }
@@ -239,12 +267,29 @@ class MainActivity : AppCompatActivity() {
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> true
                 DragEvent.ACTION_DROP -> {
-                    val app = event.localState as? AppInfo ?: return@setOnDragListener false
+                    val payload = event.localState as? DragPayload ?: return@setOnDragListener false
                     val targetIndex = findNearestDockSlot(event.x)
-                    if (dockApps.isEmpty()) {
-                        dockApps.add(app)
-                    } else {
-                        dockApps[targetIndex] = app
+
+                    when (payload) {
+                        is DragPayload.FromDrawer -> {
+                            if (dockApps.isEmpty()) dockApps.add(payload.app)
+                            else dockApps[targetIndex] = payload.app
+                        }
+                        is DragPayload.FromDock -> {
+                            // Zwei Dock-Plätze tauschen
+                            if (payload.originIndex in dockApps.indices && targetIndex in dockApps.indices) {
+                                val tmp = dockApps[targetIndex]
+                                dockApps[targetIndex] = dockApps[payload.originIndex]
+                                dockApps[payload.originIndex] = tmp
+                            }
+                        }
+                        is DragPayload.FromHome -> {
+                            // Von Homescreen ins Dock verschieben
+                            homeIconContainer.removeView(payload.view)
+                            persistPinnedIcons()
+                            if (dockApps.isEmpty()) dockApps.add(payload.app)
+                            else dockApps[targetIndex] = payload.app
+                        }
                     }
                     persistDock()
                     rebuildDockViews()
@@ -270,27 +315,36 @@ class MainActivity : AppCompatActivity() {
         return closestIndex
     }
 
-    // ---------- Homescreen-Icons (Anheften per Drag & Drop) ----------
+    // ---------- Homescreen-Icons ----------
 
-    private fun startDragFromDrawer(app: AppInfo, view: View) {
-        // Drawer sofort unsichtbar machen (ohne Animation), damit der Homescreen
-        // während des Ziehens sichtbar ist und Drops dort ankommen können.
+    private fun startDrag(payload: DragPayload, view: View): Boolean {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         appDrawerPanel.visibility = View.INVISIBLE
         drawerOpen = false
         searchField.text.clear()
 
+        val app = when (payload) {
+            is DragPayload.FromDrawer -> payload.app
+            is DragPayload.FromDock -> payload.app
+            is DragPayload.FromHome -> payload.app
+        }
         val clipData = ClipData.newPlainText("app_package", app.packageName)
-        val shadow = View.DragShadowBuilder(view)
-        view.startDragAndDrop(clipData, shadow, app, 0)
+        view.startDragAndDrop(clipData, View.DragShadowBuilder(view), payload, 0)
+        return true
     }
 
-    private fun setupHomeDragTarget() {
-        homeIconContainer.setOnDragListener { _, event ->
+    /** Zeigt/versteckt die "Entfernen"-Zone anstelle der Uhr, solange gezogen wird. */
+    private fun setupGlobalDragUi() {
+        findViewById<View>(R.id.rootLayout).setOnDragListener { _, event ->
             when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> true
-                DragEvent.ACTION_DROP -> {
-                    val app = event.localState as? AppInfo ?: return@setOnDragListener false
-                    addPinnedIcon(app, event.x, event.y, persist = true)
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    clockCard.visibility = View.INVISIBLE
+                    removeZone.visibility = View.VISIBLE
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    clockCard.visibility = View.VISIBLE
+                    removeZone.visibility = View.GONE
                     true
                 }
                 else -> true
@@ -298,47 +352,105 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun addPinnedIcon(app: AppInfo, x: Float, y: Float, persist: Boolean) {
+    private fun setupRemoveZone() {
+        removeZone.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> true
+                DragEvent.ACTION_DROP -> {
+                    when (val payload = event.localState as? DragPayload) {
+                        is DragPayload.FromHome -> {
+                            homeIconContainer.removeView(payload.view)
+                            persistPinnedIcons()
+                        }
+                        is DragPayload.FromDock -> {
+                            if (payload.originIndex in dockApps.indices) {
+                                dockApps.removeAt(payload.originIndex)
+                                persistDock()
+                                rebuildDockViews()
+                            }
+                        }
+                        else -> { /* Drawer-Apps können nicht "entfernt" werden, nur nicht platziert */ }
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+    }
+
+    private fun setupHomeDragTarget() {
+        homeIconContainer.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> true
+                DragEvent.ACTION_DROP -> {
+                    val payload = event.localState as? DragPayload ?: return@setOnDragListener false
+                    val (snapX, snapY) = snapToGrid(event.x, event.y)
+
+                    when (payload) {
+                        is DragPayload.FromDrawer -> addPinnedIcon(payload.app, snapX, snapY, persist = true)
+                        is DragPayload.FromDock -> {
+                            if (payload.originIndex in dockApps.indices) {
+                                dockApps.removeAt(payload.originIndex)
+                                persistDock()
+                                rebuildDockViews()
+                            }
+                            addPinnedIcon(payload.app, snapX, snapY, persist = true)
+                        }
+                        is DragPayload.FromHome -> {
+                            val lp = payload.view.layoutParams as FrameLayout.LayoutParams
+                            lp.leftMargin = snapX
+                            lp.topMargin = snapY
+                            payload.view.layoutParams = lp
+                            persistPinnedIcons()
+                        }
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+    }
+
+    /** Rastet eine Ablageposition auf ein unsichtbares Raster ein, für ein aufgeräumtes Bild. */
+    private fun snapToGrid(x: Float, y: Float): Pair<Int, Int> {
+        val cell = gridCellPx
+        val snappedX = ((x / cell).roundToInt() * cell).toInt().coerceAtLeast(0)
+        val snappedY = ((y / cell).roundToInt() * cell).toInt().coerceAtLeast(0)
+        return snappedX to snappedY
+    }
+
+    private fun addPinnedIcon(app: AppInfo, x: Int, y: Int, persist: Boolean) {
         val view = LayoutInflater.from(this).inflate(R.layout.item_app, homeIconContainer, false)
         val icon = view.findViewById<ImageView>(R.id.appIcon)
         val label = view.findViewById<TextView>(R.id.appLabel)
         icon.setImageDrawable(app.icon)
         label.text = app.label
+        view.tag = app.packageName
+        view.applyPressBounce()
 
         val params = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         )
-        params.leftMargin = x.toInt().coerceAtLeast(0)
-        params.topMargin = y.toInt().coerceAtLeast(0)
+        params.leftMargin = x
+        params.topMargin = y
         view.layoutParams = params
 
         view.setOnClickListener { launchApp(app) }
-        view.setOnLongClickListener {
-            AlertDialog.Builder(this)
-                .setTitle(app.label)
-                .setMessage("Vom Homescreen entfernen?")
-                .setPositiveButton("Entfernen") { _, _ ->
-                    homeIconContainer.removeView(view)
-                    persistPinnedIcons()
-                }
-                .setNegativeButton("Abbrechen", null)
-                .show()
-            true
-        }
+        view.setOnLongClickListener { v -> startDrag(DragPayload.FromHome(app, v), v) }
 
         homeIconContainer.addView(view)
         if (persist) persistPinnedIcons()
     }
 
+    /** Robuste Speicherung über den View-Tag (Package-Name) statt über den Anzeigenamen. */
     private fun persistPinnedIcons() {
         val icons = mutableListOf<LauncherPrefs.PinnedIcon>()
         for (i in 0 until homeIconContainer.childCount) {
             val child = homeIconContainer.getChildAt(i)
-            val label = child.findViewById<TextView>(R.id.appLabel)?.text?.toString()
-            val app = allApps.find { it.label == label } ?: continue
+            val packageName = child.tag as? String ?: continue
             val lp = child.layoutParams as FrameLayout.LayoutParams
-            icons.add(LauncherPrefs.PinnedIcon(app.packageName, lp.leftMargin.toFloat(), lp.topMargin.toFloat()))
+            icons.add(LauncherPrefs.PinnedIcon(packageName, lp.leftMargin.toFloat(), lp.topMargin.toFloat()))
         }
         LauncherPrefs.savePinnedIcons(this, icons)
     }
@@ -347,7 +459,7 @@ class MainActivity : AppCompatActivity() {
         val saved = LauncherPrefs.getPinnedIcons(this)
         for (pinned in saved) {
             val app = allApps.find { it.packageName == pinned.packageName } ?: continue
-            addPinnedIcon(app, pinned.x, pinned.y, persist = false)
+            addPinnedIcon(app, pinned.x.toInt(), pinned.y.toInt(), persist = false)
         }
     }
 
@@ -382,6 +494,7 @@ class MainActivity : AppCompatActivity() {
     private fun openDrawer() {
         if (drawerOpen) return
         drawerOpen = true
+        refreshRecentRow()
         appDrawerPanel.visibility = View.VISIBLE
         appDrawerPanel.translationY = appDrawerPanel.height.toFloat()
         appDrawerPanel.alpha = 0f

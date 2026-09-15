@@ -7,7 +7,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Animierter Liquid-Glass-Hintergrund -->
+    <!-- Animierter Liquid-Glass-Hintergrund (keine Wallpaper-Berechtigung nötig) -->
     <com.example.liquidglasslauncher.LiquidBackgroundView
         android:id="@+id/liquidBackground"
         android:layout_width="match_parent"
@@ -28,12 +28,6 @@
     <!-- Bereich für auf den Homescreen gezogene/angeheftete Apps -->
     <FrameLayout
         android:id="@+id/homeIconContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <!-- Container für frei platzierte, angeheftete Homescreen-Icons -->
-    <FrameLayout
-        android:id="@+id/homeIconsContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
@@ -71,28 +65,28 @@
             tools:text="Dienstag, 15. September" />
     </LinearLayout>
 
-    <!-- Erscheint nur während man ein angeheftetes Icon zieht -->
+    <!-- Erscheint nur während eines aktiven Drags: Ablegen hier entfernt die App -->
     <LinearLayout
-        android:id="@+id/trashZone"
+        android:id="@+id/removeZone"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:background="@drawable/bg_glass_pill_danger"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="12dp"
+        android:background="@drawable/bg_remove_zone"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="20dp"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="20dp">
+        android:layout_marginTop="72dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🗑  Loslassen zum Entfernen"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
+            android:text="🗑  Hier loslassen zum Entfernen"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <!-- Tippbarer Button als verlässliche Alternative zur Swipe-Geste -->
@@ -152,30 +146,57 @@
             android:orientation="vertical"
             android:paddingTop="56dp">
 
-            <EditText
-                android:id="@+id/searchField"
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="24dp"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/bg_glass_pill"
-                android:hint="@string/search_hint"
-                android:textColorHint="@color/text_secondary"
-                android:textColor="@color/text_primary"
-                android:paddingHorizontal="20dp"
-                android:paddingVertical="12dp"
-                android:inputType="text"
-                android:imeOptions="actionSearch"
-                android:singleLine="true" />
+                android:layout_marginBottom="14dp">
+
+                <EditText
+                    android:id="@+id/searchField"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_pill"
+                    android:hint="@string/search_hint"
+                    android:textColorHint="@color/text_secondary"
+                    android:textColor="@color/text_primary"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="48dp"
+                    android:paddingVertical="12dp"
+                    android:inputType="text"
+                    android:imeOptions="actionSearch"
+                    android:singleLine="true" />
+
+                <ImageView
+                    android:id="@+id/clearSearchButton"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="14dp"
+                    android:src="@drawable/ic_clear"
+                    android:visibility="gone"
+                    android:contentDescription="@null" />
+            </FrameLayout>
 
             <TextView
+                android:id="@+id/recentLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginBottom="6dp"
+                android:text="Zuletzt verwendet"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/recentAppsRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Lang drücken + ziehen: App auf Homescreen oder Dock anheften"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                android:gravity="center"
-                android:layout_marginBottom="8dp" />
+                android:orientation="horizontal"
+                android:paddingHorizontal="18dp"
+                android:layout_marginBottom="10dp"
+                android:visibility="gone" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/appDrawerRecycler"

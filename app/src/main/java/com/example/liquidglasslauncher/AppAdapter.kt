@@ -21,6 +21,7 @@ class AppAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_app, parent, false)
+        view.applyPressBounce()
         return AppViewHolder(view)
     }
 

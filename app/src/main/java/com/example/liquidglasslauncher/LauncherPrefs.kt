@@ -3,13 +3,15 @@ package com.example.liquidglasslauncher
 import android.content.Context
 
 /**
- * Speichert die Dock-Belegung und die auf dem Homescreen angehefteten Apps
- * dauerhaft in SharedPreferences, damit beides einen Neustart übersteht.
+ * Speichert Dock-Belegung, angeheftete Homescreen-Apps und zuletzt genutzte Apps
+ * dauerhaft in SharedPreferences, damit alles einen Neustart übersteht.
  */
 object LauncherPrefs {
     private const val PREFS_NAME = "liquid_launcher_prefs"
     private const val KEY_DOCK = "dock_packages"
     private const val KEY_PINNED = "pinned_icons"
+    private const val KEY_RECENT = "recent_apps"
+    private const val MAX_RECENT = 10
 
     fun getDockPackages(context: Context): List<String>? {
         val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,5 +48,21 @@ object LauncherPrefs {
             .edit()
             .putString(KEY_PINNED, raw)
             .apply()
+    }
+
+    fun recordLaunch(context: Context, packageName: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val current = prefs.getString(KEY_RECENT, null)
+            ?.split("|")?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+        current.remove(packageName)
+        current.add(0, packageName)
+        while (current.size > MAX_RECENT) current.removeAt(current.size - 1)
+        prefs.edit().putString(KEY_RECENT, current.joinToString("|")).apply()
+    }
+
+    fun getRecentApps(context: Context): List<String> {
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_RECENT, null) ?: return emptyList()
+        return raw.split("|").filter { it.isNotBlank() }
     }
 }
