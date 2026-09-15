@@ -7,7 +7,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Animierter Liquid-Glass-Hintergrund (keine Wallpaper-Berechtigung nötig) -->
+    <!-- Animierter Liquid-Glass-Hintergrund -->
     <com.example.liquidglasslauncher.LiquidBackgroundView
         android:id="@+id/liquidBackground"
         android:layout_width="match_parent"
@@ -24,6 +24,18 @@
         android:layout_height="240dp"
         android:background="@drawable/scrim_bottom_gradient"
         app:layout_constraintBottom_toBottomOf="parent" />
+
+    <!-- Bereich für auf den Homescreen gezogene/angeheftete Apps -->
+    <FrameLayout
+        android:id="@+id/homeIconContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Container für frei platzierte, angeheftete Homescreen-Icons -->
+    <FrameLayout
+        android:id="@+id/homeIconsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <!-- Uhr-Widget in Glas-Karte -->
     <LinearLayout
@@ -59,6 +71,30 @@
             tools:text="Dienstag, 15. September" />
     </LinearLayout>
 
+    <!-- Erscheint nur während man ein angeheftetes Icon zieht -->
+    <LinearLayout
+        android:id="@+id/trashZone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@drawable/bg_glass_pill_danger"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="12dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🗑  Loslassen zum Entfernen"
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
+    </LinearLayout>
+
     <!-- Tippbarer Button als verlässliche Alternative zur Swipe-Geste -->
     <LinearLayout
         android:id="@+id/openDrawerButton"
@@ -84,7 +120,7 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Dock: feste Favoriten-Icons in Glas-Pille, ohne Beschriftung -->
+    <!-- Dock: anpassbare Favoriten-Icons in Glas-Pille -->
     <LinearLayout
         android:id="@+id/dock"
         android:layout_width="match_parent"
@@ -131,6 +167,15 @@
                 android:inputType="text"
                 android:imeOptions="actionSearch"
                 android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Lang drücken + ziehen: App auf Homescreen oder Dock anheften"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:layout_marginBottom="8dp" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/appDrawerRecycler"
