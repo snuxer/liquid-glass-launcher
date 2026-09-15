@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Liquid Glass Launcher</string>
+    <string name="search_hint">Apps durchsuchen…</string>
+    <string name="swipe_hint">Nach oben wischen für alle Apps</string>
+</resources>

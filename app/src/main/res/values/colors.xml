@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="glass_fill">#33FFFFFF</color>
+    <color name="glass_fill_strong">#55FFFFFF</color>
+    <color name="glass_stroke">#66FFFFFF</color>
+    <color name="glass_stroke_soft">#22FFFFFF</color>
+    <color name="scrim_top">#40000000</color>
+    <color name="scrim_bottom">#70000000</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#CCFFFFFF</color>
+    <color name="accent">#7FD4FF</color>
+    <color name="wallpaper_fallback_start">#2B5876</color>
+    <color name="wallpaper_fallback_end">#4E4376</color>
+</resources>
